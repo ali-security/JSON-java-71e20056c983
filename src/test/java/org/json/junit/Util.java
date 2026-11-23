@@ -117,4 +117,40 @@ public class Util {
             );
         }
     }
+
+    /**
+     * Runs the given body on a dedicated thread with a large (8 MB) stack and
+     * returns whatever it threw. Deeply nested input that the parser is
+     * expected to reject with its nesting-depth guard can otherwise hit a
+     * StackOverflowError first when the tests are run with a small stack
+     * (for example -Xss512k), so the outcome asserted on would depend on the
+     * stack size of the calling thread rather than on the guard itself.
+     * @param body the code to run
+     * @return the Throwable thrown by the body, or <code>null</code> if it
+     *     completed normally
+     */
+    public static Throwable throwableFromLargeStack(final Runnable body) {
+        final Throwable[] thrown = new Throwable[1];
+        Thread worker = new Thread(null, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    body.run();
+                } catch (Throwable t) {
+                    thrown[0] = t;
+                }
+            }
+        }, "large-stack-test", 8L * 1024L * 1024L);
+        worker.start();
+        try {
+            worker.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            AssertionError error = new AssertionError(
+                    "Interrupted while waiting for the large-stack test thread");
+            error.initCause(e);
+            throw error;
+        }
+        return thrown[0];
+    }
 }
